@@ -5,11 +5,12 @@ version = "0.0.1"
 
 setup(name = package,
       version = version,
-      description="""Kind incommunicados package 
+      description='Kind incommunicados package for user secrets',
+      long_description="""Kind incommunicados package 
 for storing user [API] keys necessary for running
 some programs/workflows.
 """,
-      url='https://github.com/dicaso/tranx',
+      url='https://github.com/dicaso/kindi',
       author = 'Christophe Van Neste',
       author_email = 'beukueb@gmail.com',
       license = 'GNU GENERAL PUBLIC LICENSE',
