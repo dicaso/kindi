@@ -15,7 +15,8 @@ import configparser, os
 
 class Secrets(object):
     class __SecretsSingleton:
-        def __init__(self):
+        def __init__(self,parent):
+            self.__parent = parent
             self.secrets = configparser.ConfigParser()
             self.secretConfigFile = os.path.expanduser('~/.incommunicados')
             if os.path.exists(self.secretConfigFile):
@@ -24,18 +25,20 @@ class Secrets(object):
         def __str__(self):
             return repr(self) + repr(self.secrets)
 
-        def getsecret(self,key,section='API',fail=False,timeout=120):
+        def getsecret(self,key,section='',fail=False,timeout=120):
             """Get secret
 
             If empty string, ask user to set it and save to user config file.
             
             Args:
                 key (str): Secret key name.
-                section (str): Section name.
+                section (str): Section name. Defaults to default_section of singleton wrapper class.
+                  This allows different packages using the same singleton with different default_section.
                 fail (bool): If fail, fails immediately if key not provided in config.
                 timeout (int): If key not in config, wait timeout seconds for user to provide.
                   Fail if not provided within timeframe.
             """
+            if not section: section = self.__parent.default_section
             s = self.secrets.get(section, key, fallback = '')
             if not s:
                 if fail: raise KeyError('{} {} not in config'.format(section,key))
@@ -61,14 +64,12 @@ class Secrets(object):
 
     instance = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, default_section = 'API', **kwargs):
+        self.default_section = default_section
         if not Secrets.instance:
-            Secrets.instance = Secrets.__SecretsSingleton(*args, **kwargs)
+            Secrets.instance = Secrets.__SecretsSingleton(*args, parent=self, **kwargs)
 
     def __getattr__(self, name):
         return getattr(self.instance, name)
-
-    def __setattr__(self, name):
-        return setattr(self.instance, name)
 
 
