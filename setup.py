@@ -16,6 +16,7 @@ some programs/workflows.
       license = 'GNU GENERAL PUBLIC LICENSE',
       packages = ['kindi'],
       install_requires = [
+          'cryptography'
       ],
       extras_require = {
       },
