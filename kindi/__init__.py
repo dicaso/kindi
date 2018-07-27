@@ -19,20 +19,47 @@ from kindi.config import config
 class Secrets(object):
     class __SecretsSingleton:
         def __init__(self, parent, ekey=None):
+            # Settings
             self.__parent = parent
             self.security = config['kindi']['security_level']
             self.storage = config['kindi']['storage']
-            if self.security != 'LOW':
-                if ekey:
-                    self.ekey = ekey
-                else:
-                    raise Exception('Cannot instantiate Secrets for MEDIUM and HIGH security if no key is provided')
+            self.__ekey = ekey
             if self.storage == 'DATABASE': self.__conn = None
-            self.secrets = configparser.ConfigParser()
-            self.secretConfigFile = os.path.expanduser('~/.incommunicados')
-            if os.path.exists(self.secretConfigFile):
-                self.read_secretsfile()
+            self.secretConfigFile = os.path.expanduser(
+                '~/.incommunicados' if self.storage == 'FILE' else '~/.incommunicadob'
+            )
+            if self.security == 'LOW' or ekey:
+                self.init_secrets()
+            else:
+                self.secrets = None
 
+        def init_secrets(self):
+            self.secrets = configparser.ConfigParser()
+            if os.path.exists(self.secretConfigFile):
+                self.read_secrets()
+
+        @property
+        def ekey(self):
+            """Encryption key
+
+            If not set at initiation, and non-LOW security,
+            asks input from user. In MEDIUM security, ekey
+            is stored in Secrets object. Higher security settings
+            will ask for the key for each read and write access.
+            """
+            if self.security == 'LOW':
+                raise Exception('LOW security does not need access to encryption key.')
+            if self.__ekey:
+                ekey = self.__ekey
+            else:
+                ekey = self.getuserinput(
+                    'Provide kindi secrets encryption key: ',
+                    'Cannot instantiate Secrets for MEDIUM and HIGH security if no key is provided'
+                )
+                if self.security == 'MEDIUM':
+                    self.__ekey = ekey
+            return ekey
+            
         def __str__(self):
             return repr(self) + repr(self.secrets)
 
@@ -46,7 +73,7 @@ class Secrets(object):
             cursor = self.__get_cursor()
             cursor.execute(
                 '''CREATE TABLE IF NOT EXISTS configblobs (
- blob_id integer PRIMARY KEY,
+ blob_id INTEGER PRIMARY KEY,
  name text NOT NULL UNIQUE,
  content blob NOT NULL UNIQUE
 );
@@ -60,6 +87,19 @@ class Secrets(object):
 '''
             )
             cursor.close()
+
+        @staticmethod
+        def getuserinput(inputmsg,timeoutmsg='Input not given on time in a non-interactive job.',timeout=120):
+            if timeout and not os.sys.ps1:
+                import signal
+                def interrupted(signum, frame):
+                    raise KeyError(timeoutmsg)
+                signal.signal(signal.SIGALRM, interrupted)
+                signal.alarm(timeout)
+            else: timeout = False # timeout disabled in interactive mode
+            inp = input(inputmsg)
+            if timeout: signal.alarm(0) # disable alarm
+            return inp
             
         def getsecret(self,key,section='',fail=False,timeout=120):
             """Get secret
@@ -74,25 +114,23 @@ class Secrets(object):
                 timeout (int): If key not in config, wait timeout seconds for user to provide.
                   Fail if not provided within timeframe.
             """
+            if not self.secrets: self.init_secrets()
             if not section: section = self.__parent.default_section
             s = self.secrets.get(section, key, fallback = '')
             if not s:
-                if fail: raise KeyError('{} {} not in config'.format(section,key))
-                if timeout:
-                    import signal
-                    def interrupted(signum, frame):
-                        print('Key was not provided within',timeout,'seconds.')
-                        raise KeyError('{} {} not in config'.format(section,key))
-                    signal.signal(signal.SIGALRM, interrupted)
-                    signal.alarm(timeout)
-                s = input('Provide key for {}/{}: '.format(section,key))
+                if fail: raise KeyError(f'{section} {key} not in config')
+                s = self.getuserinput(
+                    f'Provide key for {section}/{key}: ',
+                    f'''Key was not provided within {timeout} seconds.
+{section} {key} not in config''',
+                    timeout
+                )
                 try:
                     self.secrets[section][key] = s
                 except KeyError:
                     # Section does not yet exist in config, so create
                     self.secrets[section] = {key: s}
-                if timeout: signal.alarm(0) # disable alarm
-                self.write_secretsfile()
+                self.write_secrets()
             return s
 
         def read_secrets(self):
@@ -119,30 +157,51 @@ Env variable KINDI_SECURITY_LEVEL should be set to LOW, MEDIUM or HIGH'''
                 )
 
         def __read_secrets_db(self):
-            pass
+            cursor = self.__get_cursor()
+            configdb = cursor.execute('SELECT content FROM configblobs WHERE name = ?',(self.security,)).fetchone()
+            if configdb:
+                configstr = configdb[0]
+                if self.security != 'LOW':
+                    f = Fernet(self.ekey)
+                    configstr = f.decrypt(configstr).decode()
+                self.secrets.read_string(configstr)
+            cursor.close()
 
         def write_secrets(self):
+            configText = StringIO()
+            self.secrets.write(configText)
             if self.storage == 'FILE':
-                self.__write_secrets_file()
-            else: self.__write_secrets_db()
+                self.__write_secrets_file(configText.getvalue())
+            else: self.__write_secrets_db(configText.getvalue())
+            # chmod to make read/write only for user
+            os.chmod(self.secretConfigFile, 0o600)
 
-        def write_secrets_file(self):
+        def __write_secrets_file(self,configstr):
             if self.security == 'LOW':
                 with open(self.secretConfigFile,'wt') as configFile:
-                    self.secrets.write(configFile)
+                    configFile.write(configstr)
             elif self.security == 'MEDIUM':
                 f = Fernet(self.ekey)
-                tokenText = StringIO()
-                self.secrets.write(tokenText)
-                token = f.encrypt(tokenText.getvalue().encode())
-                cursor.execute('INSERT INTO t VALUES(?)', [buffer(ablob)])
+                token = f.encrypt(configstr.encode())
                 with open(self.secretConfigFile,'wb') as configFile:
                     configFile.write(token)
             elif self.security == 'HIGH':
                 raise NotImplementedError("when implemented will create encrypted versions for one time use in non-interactive CLI")
-            # chmod to make read/write only for user
-            os.chmod(self.secretConfigFile, 0o600)
 
+        def __write_secrets_db(self,configstr):
+            import sqlite3
+            self.__create_tables()
+            if self.security != 'LOW':
+                f = Fernet(self.ekey)
+                configstr = f.encrypt(configstr.encode())
+            cursor = self.__get_cursor()
+            try:
+                cursor.execute('INSERT INTO configblobs VALUES(?,?,?)', (None,self.security,configstr))
+            except sqlite3.IntegrityError:
+                cursor.execute('UPDATE configblobs SET content = ? WHERE name = ?', (configstr,self.security))
+            cursor.close()
+            self.__conn.commit()
+            
     instance = None
 
     def __init__(self, *args, default_section = 'API', **kwargs):

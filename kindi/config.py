@@ -18,7 +18,7 @@ configFiles = [
 config = configparser.ConfigParser()
 config['kindi'] = {
     'security_level': os.environ.get('KINDI_SECURITY_LEVEL','LOW'), # options: LOW, MEDIUM, HIGH
-    'storage': os.environ.get('KINDI_STORAGE','FILE') # options: FILE, DATABASE
+    'storage': os.environ.get('KINDI_STORAGE','DATABASE') # options: FILE, DATABASE
 }
 
 # Read configuration files
