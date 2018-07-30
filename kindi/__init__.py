@@ -90,7 +90,7 @@ class Secrets(object):
 
         @staticmethod
         def getuserinput(inputmsg,timeoutmsg='Input not given on time in a non-interactive job.',timeout=120):
-            if timeout and not os.sys.ps1:
+            if timeout and not hasattr(os.sys,'ps1'):
                 import signal
                 def interrupted(signum, frame):
                     raise KeyError(timeoutmsg)

@@ -1,7 +1,7 @@
 from setuptools import setup
 
 package = "kindi"
-version = "0.0.2"
+version = "0.0.3"
 
 setup(name = package,
       version = version,
