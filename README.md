@@ -27,3 +27,7 @@ With this configuration the secrets will not be encrypted, but they
 will only be readable by your user. They will also be stored in a flat
 text file for easy editing. It is a strong recommendation to only use
 this configuration on a system you trust sufficiently.
+
+## Todo
+
+Use https://github.com/ActiveState/appdirs for save location
