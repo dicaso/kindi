@@ -8,11 +8,17 @@ Options:
     storage: FILE, DATABASE
 """
 
-import configparser, os
+import configparser, os, appdirs
+configdir = appdirs.AppDirs('kindi').user_config_dir
 configFiles = [
     os.path.expanduser('~/.incommunicados.cfg'),
-    '/usr/local/etc/kindi.cfg'
+    os.path.join(configdir, 'kindi.cfg')
 ]
+
+# Check existance of configdir
+if not os.path.exists(configdir):
+    os.makedirs(configdir, mode=0o700)
+    print('created kindi configdir', configdir)
 
 # Default configuration
 config = configparser.ConfigParser()

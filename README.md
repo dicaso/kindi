@@ -28,6 +28,13 @@ will only be readable by your user. They will also be stored in a flat
 text file for easy editing. It is a strong recommendation to only use
 this configuration on a system you trust sufficiently.
 
-## Todo
+## Developers
 
-Use https://github.com/ActiveState/appdirs for save location
+Developers should make calls for secrets in the following way,
+replacing `my_package` with the name of their package:
+
+    from kindi import Secrets
+    my_package_secrets = Secrets(default_section='my_package')
+    my_package_secrets['email']
+    my_package_secrets['email','different_section'] # key storred in different section
+

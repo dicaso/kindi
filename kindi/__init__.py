@@ -14,7 +14,7 @@ TODO:
 import configparser, os
 from cryptography.fernet import Fernet
 from io import StringIO
-from kindi.config import config
+from kindi.config import config, configdir
 
 class Secrets(object):
     class __SecretsSingleton:
@@ -25,8 +25,9 @@ class Secrets(object):
             self.storage = config['kindi']['storage']
             self.__ekey = ekey
             if self.storage == 'DATABASE': self.__conn = None
-            self.secretConfigFile = os.path.expanduser(
-                '~/.incommunicados' if self.storage == 'FILE' else '~/.incommunicadob'
+            self.secretConfigFile = os.path.join(
+                configdir,
+                'incommunicados' if self.storage == 'FILE' else 'incommunicadob'
             )
             if self.security == 'LOW' or ekey:
                 self.init_secrets()
@@ -209,8 +210,14 @@ Env variable KINDI_SECURITY_LEVEL should be set to LOW, MEDIUM or HIGH'''
         if not Secrets.instance:
             Secrets.instance = Secrets.__SecretsSingleton(*args, parent=self, **kwargs)
 
-    def __getattr__(self, name):
-        return getattr(self.instance, name)
+    def __getitem__(self, key):
+        if len(key) == 2: name, section = key
+        else: name, section = key, self.default_section
+        return self.instance.getsecret(name, section=section)
+
+    def getsecret(self, key, section='', **kwargs):
+        if not section: section = self.default_section
+        return self.instance.getsecret(key, section, **kwargs)
 
 
 # Utilities
